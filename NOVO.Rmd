@@ -1,0 +1,769 @@
+---
+title: "actuarial Data Science"
+author: "fazal hyder"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+# Goal of this project is to predict the target customers who would be intrested in getting a car insurance and would could be the premium of their insurance on the basis of their driving records and personal data. 
+
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(pROC)
+library(GGally)
+library(corrplot)
+library(caret)
+library(psych)
+library(rpart)
+library(randomForest)
+library(nnet)
+library(e1071)
+library(naivebayes)
+library(readxl)
+library(tidyverse)
+data <- read_csv("Downloads/Car_Insurance_Claim.csv")
+# Load necessary library
+library(dplyr)
+
+# Remove the ID column using dplyr's select function
+data <- data %>% dplyr::select(-ID)
+
+# Verify the column has been removed
+head(data)
+
+summary(data)
+```
+## Step - 1(DATA CLEANING & PREPROCESSING)
+
+### Let's check for the null values , missing values, range and other descriptive Statistics of the Data 
+
+```{r}
+data_info <- str(data)
+
+# Count missing values for each column
+missing_values <- sapply(data, function(x) sum(is.na(x)))
+print("Missing values in each column:")
+print(missing_values)
+
+# Descriptive statistics for each column
+descriptive_stats <- summary(data)
+
+```
+
+###. As we can see there are na values in variable 'ANNUAL_MILEAGE' and 'CREDIT_SCORE' .I will clean the Variable 'ANNUAL_MILEAGE' and try to reserach more about the variable 'CREDIT_SCORE'
+
+```{r}
+
+
+data_clean <- data %>% filter(!is.na(ANNUAL_MILEAGE))
+# Check for NA values in the ANNUAL_MILEAGE column of the data_clean dataset
+na_count_annual_mileage_clean <- sum(is.na(data_clean$ANNUAL_MILEAGE))
+print(paste("Number of NA values in ANNUAL_MILEAGE (data_clean):", na_count_annual_mileage_clean))
+
+
+
+```
+
+```{r}
+# Load the necessary library
+library(ggplot2)
+
+# Histogram of CREDIT_SCORE
+ggplot(data_clean, aes(x = CREDIT_SCORE)) +
+  geom_histogram(binwidth = 0.05, fill = "lightblue", color = "black") +
+  labs(title = "Distribution of Credit Score", x = "Credit Score", y = "Frequency") +
+  theme_minimal()
+
+# Boxplot of CREDIT_SCORE
+ggplot(data_clean, aes(y = CREDIT_SCORE)) +
+  geom_boxplot(fill = "lightgreen", color = "black") +
+  labs(title = "Boxplot of Credit Score", y = "Credit Score") +
+  theme_minimal()
+
+```
+### Assuming credit score is one of the significant variables in predicting premiums and potential customer I will not get rid of it instead assign a user defined constant '0' Which means no credit history.
+```{r}
+# Replace NA values in CREDIT_SCORE with 0
+data_clean$CREDIT_SCORE[is.na(data_clean$CREDIT_SCORE)] <- 0
+
+# Verify the change by checking for remaining NA values
+na_count_credit_score_clean <- sum(is.na(data_clean$CREDIT_SCORE))
+print(paste("Number of NA values in CREDIT_SCORE (data_clean) after replacement:", na_count_credit_score_clean))
+
+# Display the first few rows of the updated dataset
+head(data_clean)
+
+```
+```{r}
+ggplot(data_clean, aes(y = CREDIT_SCORE)) +
+  geom_boxplot(fill = "lightgreen", color = "black") +
+  labs(title = "Boxplot of Credit Score after cleaning data set", y = "Credit Score") +
+  theme_minimal()
+```
+
+## Step - 2 (EXPLORATORY DATA ANALYSIS  & VISUALIZATION )
+```{r}
+# Load necessary library
+library(ggplot2)
+
+# Define colors
+color_light_green <- "lightgreen"
+color_light_blue <- "lightblue"
+
+# Bar chart for AGE
+ggplot(data_clean, aes(x = factor(AGE))) +
+  geom_bar(fill = color_light_blue) +
+  labs(title = "Distribution of Age Groups", x = "Age Group", y = "Count") +
+  theme_minimal()
+
+# Bar chart for GENDER
+ggplot(data_clean, aes(x = factor(GENDER))) +
+  geom_bar(fill = color_light_green) +
+  labs(title = "Distribution of Gender", x = "Gender", y = "Count") +
+  theme_minimal()
+
+# Bar chart for RACE
+ggplot(data_clean, aes(x = factor(RACE))) +
+  geom_bar(fill = color_light_blue) +
+  labs(title = "Distribution of Race", x = "Race", y = "Count") +
+  theme_minimal()
+
+# Bar chart for VEHICLE_YEAR
+ggplot(data_clean, aes(x = factor(VEHICLE_YEAR))) +
+  geom_bar(fill = color_light_green) +
+  labs(title = "Distribution of Vehicle Year", x = "Vehicle Year", y = "Count") +
+  theme_minimal()
+
+# Bar chart for VEHICLE_TYPE
+ggplot(data_clean, aes(x = factor(VEHICLE_TYPE))) +
+  geom_bar(fill = color_light_blue) +
+  labs(title = "Distribution of Vehicle Type", x = "Vehicle Type", y = "Count") +
+  theme_minimal()
+
+# Bar chart for EDUCATION
+ggplot(data_clean, aes(x = factor(EDUCATION))) +
+  geom_bar(fill = color_light_green) +
+  labs(title = "Distribution of Education Level", x = "Education Level", y = "Count") +
+  theme_minimal()
+
+# Bar chart for INCOME
+ggplot(data_clean, aes(x = factor(INCOME))) +
+  geom_bar(fill = color_light_blue) +
+  labs(title = "Distribution of Income Level", x = "Income Level", y = "Count") +
+  theme_minimal()
+
+# Bar chart for DRIVING_EXPERIENCE
+ggplot(data_clean, aes(x = factor(DRIVING_EXPERIENCE))) +
+  geom_bar(fill = color_light_green) +
+  labs(title = "Distribution of Driving Experience", x = "Driving Experience", y = "Count") +
+  theme_minimal()
+
+```
+
+```{r}
+# Load necessary library
+library(ggplot2)
+
+# Define colors
+color_light_green <- "lightgreen"
+color_light_blue <- "lightblue"
+
+# Bar chart for POSTAL_CODE
+ggplot(data_clean, aes(x = factor(POSTAL_CODE))) +
+  geom_bar(fill = color_light_blue) +
+  labs(title = "Distribution of Postal Codes", x = "Postal Code", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+# Bar chart for SPEEDING_VIOLATIONS
+ggplot(data_clean, aes(x = factor(SPEEDING_VIOLATIONS))) +
+  geom_bar(fill = color_light_green) +
+  labs(title = "Distribution of Speeding Violations", x = "Speeding Violations", y = "Count") +
+  theme_minimal()
+
+# Bar chart for DUIS
+ggplot(data_clean, aes(x = factor(DUIS))) +
+  geom_bar(fill = color_light_blue) +
+  labs(title = "Distribution of DUIs", x = "DUIs", y = "Count") +
+  theme_minimal()
+
+# Bar chart for PAST_ACCIDENTS
+ggplot(data_clean, aes(x = factor(PAST_ACCIDENTS))) +
+  geom_bar(fill = color_light_green) +
+  labs(title = "Distribution of Past Accidents", x = "Past Accidents", y = "Count") +
+  theme_minimal()
+
+# Bar chart for CREDIT_SCORE
+ggplot(data_clean, aes(x = factor(round(CREDIT_SCORE, 1)))) +
+  geom_bar(fill = color_light_blue) +
+  labs(title = "Distribution of Credit Scores", x = "Credit Score (Rounded)", y = "Count") +
+  theme_minimal()
+
+# Bar chart for VEHICLE_OWNERSHIP
+ggplot(data_clean, aes(x = factor(VEHICLE_OWNERSHIP))) +
+  geom_bar(fill = color_light_green) +
+  labs(title = "Distribution of Vehicle Ownership", x = "Vehicle Ownership", y = "Count") +
+  theme_minimal()
+
+# Bar chart for MARRIED
+ggplot(data_clean, aes(x = factor(MARRIED))) +
+  geom_bar(fill = color_light_blue) +
+  labs(title = "Distribution of Marital Status", x = "Married", y = "Count") +
+  theme_minimal()
+
+# Bar chart for CHILDREN
+ggplot(data_clean, aes(x = factor(CHILDREN))) +
+  geom_bar(fill = color_light_green) +
+  labs(title = "Distribution of Children", x = "Number of Children", y = "Count") +
+  theme_minimal()
+
+# Bar chart for ANNUAL_MILEAGE
+ggplot(data_clean, aes(x = factor(round(ANNUAL_MILEAGE, -3)))) +
+  geom_bar(fill = color_light_blue) +
+  labs(title = "Distribution of Annual Mileage", x = "Annual Mileage (Rounded)", y = "Count") +
+  theme_minimal()
+
+# Bar chart for OUTCOME
+ggplot(data_clean, aes(x = factor(OUTCOME))) +
+  geom_bar(fill = color_light_green) +
+  labs(title = "Distribution of Outcome", x = "Outcome", y = "Count") +
+  theme_minimal()
+
+```
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(reshape2)
+library(corrplot)
+
+# Calculate correlation matrix for numeric variables
+numeric_vars <- select_if(data_clean, is.numeric)
+
+# Calculate correlations with respect to OUTCOME
+cor_matrix <- cor(numeric_vars, use = "complete.obs")
+
+# Extract the correlations with OUTCOME
+cor_with_outcome <- cor_matrix[, "OUTCOME", drop = FALSE]
+
+# Melt the correlation matrix for visualization
+melted_cor <- melt(cor_with_outcome)
+
+# Plot the correlation heatmap
+ggplot(melted_cor, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "red", mid = "white", high = "blue", midpoint = 0) +
+  labs(title = "Correlation with OUTCOME", x = "Variables", y = "", fill = "Correlation") +
+  theme_minimal() +
+  coord_flip()
+
+```
+### The heatmap displays the correlation between various variables and the outcome, with color gradations from purple (low correlation) to blue (high correlation).High Correlation: 'OUTCOME' shows complete self-correlation.Variable Insight: Variables such as 'PAST_ACCIDENTS', 'DUIS', and 'SPEEDING_VIOLATIONS' demonstrate low to slightly negative correlations, indicating lesser influence on the outcome.Unique Observation: 'ANNUAL_MILEAGE' exhibits a minimal correlation, suggesting negligible impact on the outcome.
+
+```{r}
+# Load necessary library
+library(ggplot2)
+
+# Define colors
+color_light_green <- "lightgreen"
+color_light_blue <- "lightblue"
+
+# Bar chart for AGE vs OUTCOME
+ggplot(data_clean, aes(x = factor(AGE), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Age Groups vs Outcome", x = "Age Group", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for GENDER vs OUTCOME
+ggplot(data_clean, aes(x = factor(GENDER), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Gender vs Outcome", x = "Gender", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for RACE vs OUTCOME
+ggplot(data_clean, aes(x = factor(RACE), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Race vs Outcome", x = "Race", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for VEHICLE_YEAR vs OUTCOME
+ggplot(data_clean, aes(x = factor(VEHICLE_YEAR), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Vehicle Year vs Outcome", x = "Vehicle Year", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for VEHICLE_TYPE vs OUTCOME
+ggplot(data_clean, aes(x = factor(VEHICLE_TYPE), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Vehicle Type vs Outcome", x = "Vehicle Type", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for EDUCATION vs OUTCOME
+ggplot(data_clean, aes(x = factor(EDUCATION), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Education Level vs Outcome", x = "Education Level", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for INCOME vs OUTCOME
+ggplot(data_clean, aes(x = factor(INCOME), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Income Level vs Outcome", x = "Income Level", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for DRIVING_EXPERIENCE vs OUTCOME
+ggplot(data_clean, aes(x = factor(DRIVING_EXPERIENCE), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Driving Experience vs Outcome", x = "Driving Experience", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+```
+### Through my observation in the visualizations, there is strong evidence indicating a significant potential market among individuals aged 26 to 29. These individuals predominantly belong to the majority population post-2015, are university-educated, and often own sedans. Furthermore, they typically fall into the upper income class and possess 10 to 20 years of driving experience. This demographic could represent a key target market for our services, suggesting opportunities for tailored marketing strategies to enhance engagement and growth within this segment.
+
+
+
+
+
+```{r}
+# Load necessary library
+library(ggplot2)
+
+# Define colors
+color_light_green <- "lightgreen"
+color_light_blue <- "lightblue"
+
+# Bar chart for POSTAL_CODE vs OUTCOME
+ggplot(data_clean, aes(x = factor(POSTAL_CODE), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Postal Code vs Outcome", x = "Postal Code", y = "Count", fill = "Outcome") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+# Bar chart for SPEEDING_VIOLATIONS vs OUTCOME
+ggplot(data_clean, aes(x = factor(SPEEDING_VIOLATIONS), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Speeding Violations vs Outcome", x = "Speeding Violations", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for DUIS vs OUTCOME
+ggplot(data_clean, aes(x = factor(DUIS), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "DUIs vs Outcome", x = "DUIs", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for PAST_ACCIDENTS vs OUTCOME
+ggplot(data_clean, aes(x = factor(PAST_ACCIDENTS), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Past Accidents vs Outcome", x = "Past Accidents", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for CREDIT_SCORE vs OUTCOME
+ggplot(data_clean, aes(x = factor(round(CREDIT_SCORE, 1)), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Credit Score vs Outcome", x = "Credit Score (Rounded)", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for VEHICLE_OWNERSHIP vs OUTCOME
+ggplot(data_clean, aes(x = factor(VEHICLE_OWNERSHIP), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Vehicle Ownership vs Outcome", x = "Vehicle Ownership", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for MARRIED vs OUTCOME
+ggplot(data_clean, aes(x = factor(MARRIED), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Marital Status vs Outcome", x = "Married", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for CHILDREN vs OUTCOME
+ggplot(data_clean, aes(x = factor(CHILDREN), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Children vs Outcome", x = "Number of Children", y = "Count", fill = "Outcome") +
+  theme_minimal()
+
+# Bar chart for ANNUAL_MILEAGE vs OUTCOME
+ggplot(data_clean, aes(x = factor(round(ANNUAL_MILEAGE, -3)), fill = factor(OUTCOME))) +
+  geom_bar(position = "dodge") +
+  scale_fill_manual(values = c(color_light_green, color_light_blue)) +
+  labs(title = "Annual Mileage vs Outcome", x = "Annual Mileage (Rounded)", y = "Count", fill = "Outcome") +
+  theme_minimal()
+  
+```
+
+
+
+## Step - 3 splitting the dataset for logistic regression regression analysis(Training & Testing)
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(caret)
+
+# Assume data_clean is your prepared dataset
+# Encode categorical variables as factors
+data_clean <- data_clean %>%
+  mutate(
+    AGE = as.factor(AGE),
+    GENDER = as.factor(GENDER),
+    RACE = as.factor(RACE),
+    VEHICLE_YEAR = as.factor(VEHICLE_YEAR),
+    VEHICLE_TYPE = as.factor(VEHICLE_TYPE),
+    EDUCATION = as.factor(EDUCATION),
+    INCOME = as.factor(INCOME),
+    DRIVING_EXPERIENCE = as.factor(DRIVING_EXPERIENCE),
+    POSTAL_CODE = as.factor(POSTAL_CODE),
+    VEHICLE_OWNERSHIP = as.factor(VEHICLE_OWNERSHIP),
+    MARRIED = as.factor(MARRIED),
+    CHILDREN = as.factor(CHILDREN),
+    OUTCOME = as.factor(OUTCOME) # Ensure outcome is a factor for logistic regression
+  )
+
+# Remove unnecessary columns if any
+# Example: data_clean <- data_clean %>% select(-ID) # Assuming ID was already removed
+
+# Split the data into training and testing sets (80% training, 20% testing)
+set.seed(123) # For reproducibility
+trainIndex <- createDataPartition(data_clean$OUTCOME, p = 0.8, list = FALSE, times = 1)
+trainData <- data_clean[trainIndex, ]
+testData <- data_clean[-trainIndex, ]
+
+# Verify the split
+cat("Training set size:", nrow(trainData), "\n")
+cat("Testing set size:", nrow(testData), "\n")
+
+
+
+```
+```{r}
+# Load necessary libraries
+library(MASS)   # For stepAIC
+library(stats)  # For glm
+
+# Fit the full model with all predictors
+full_model <- glm(OUTCOME ~ ., data = trainData, family = binomial)
+
+# Fit the null model (intercept only)
+null_model <- glm(OUTCOME ~ 1, data = trainData, family = binomial)
+
+# Forward Selection
+forward_model <- stepAIC(null_model, 
+                         scope = list(lower = null_model, upper = full_model), 
+                         direction = "forward", 
+                         trace = FALSE)
+
+cat("Forward Selection Model:\n")
+print(summary(forward_model))
+
+# Backward Selection
+backward_model <- stepAIC(full_model, 
+                          direction = "backward", 
+                          trace = FALSE)
+
+cat("\nBackward Selection Model:\n")
+print(summary(backward_model))
+
+# Stepwise Selection
+stepwise_model <- stepAIC(null_model, 
+                          scope = list(lower = null_model, upper = full_model), 
+                          direction = "both", 
+                          trace = FALSE)
+
+cat("\nStepwise Selection Model:\n")
+print(summary(stepwise_model))
+
+```
+
+
+### This logistic regression model analyzes factors influencing an insurance-related outcome. The model significantly reduces residual deviance from 8966.6 to 4603.8, indicating a strong fit. The AIC of 4631.8 suggests effective model efficiency compared to a baseline model.
+
+### Key findings include:
+- **Driving Experience**: More years are strongly protective against the outcome, with those having 30+ years showing the most substantial decrease in risk.
+- **Vehicle Ownership**: Owning a vehicle significantly decreases the likelihood of the outcome.
+- **Vehicle Year**: Older vehicles (pre-2015) are associated with higher risk.
+- **Gender**: Males have a higher likelihood of the outcome occurring.
+- **Marital Status**: Married individuals present lower risk.
+
+**Postal Codes** and **Annual Mileage** also contribute to risk levels, but with varying significance. DUIs and past accidents, while directionally impactful, aren't statistically significant at traditional levels.
+
+### From an actuarial standpoint, these results are crucial for refining risk profiles, optimizing premium settings, and improving customer segmentation in the insurance industry. This robust model aids in understanding critical risk factors, facilitating strategic decision-making.
+
+
+```{r}
+# Predict on the test data using the stepwise model
+testData$predicted_probs_stepwise <- predict(stepwise_model, newdata = testData, type = "response")
+
+# Convert probabilities to binary outcomes (using 0.5 as the threshold)
+testData$predicted_outcome_stepwise <- ifelse(testData$predicted_probs_stepwise > 0.5, 1, 0)
+
+# Evaluate the model with a confusion matrix
+conf_matrix_stepwise <- confusionMatrix(factor(testData$predicted_outcome_stepwise), testData$OUTCOME)
+
+# Print the confusion matrix and other metrics
+print(conf_matrix_stepwise)
+
+# Calculate and print AUC for the stepwise model
+roc_curve_stepwise <- roc(testData$OUTCOME, testData$predicted_probs_stepwise)
+auc_value_stepwise <- auc(roc_curve_stepwise)
+cat("AUC for Stepwise Model:", auc_value_stepwise, "\n")
+
+# Plot ROC curve for the stepwise model
+plot(roc_curve_stepwise, col = "blue", main = "ROC Curve for Stepwise Logistic Regression Model")
+
+```
+
+```{r}
+# Load necessary library
+library(caret)  # For confusionMatrix
+
+# Fit the logistic regression model with all variables
+logistic_model <- glm(OUTCOME ~ ., data = trainData, family = binomial)
+
+# Summary of the logistic regression model
+summary(logistic_model)
+
+# Predict on the test data
+testData$predicted_probs <- predict(logistic_model, newdata = testData, type = "response")
+
+# Convert probabilities to binary outcomes (using 0.5 as the threshold)
+testData$predicted_outcome <- ifelse(testData$predicted_probs > 0.5, 1, 0)
+
+# Evaluate the model with a confusion matrix
+conf_matrix <- confusionMatrix(factor(testData$predicted_outcome), testData$OUTCOME)
+
+# Print the confusion matrix and other metrics
+print(conf_matrix)
+
+# Optional: Calculate additional metrics like AUC
+library(pROC)
+roc_curve <- roc(testData$OUTCOME, testData$predicted_probs)
+auc_value <- auc(roc_curve)
+cat("AUC:", auc_value, "\n")
+
+# Plot ROC curve
+plot(roc_curve, col = "blue", main = "ROC Curve for Logistic Regression Model")
+
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(tidyr)
+
+# Create a data frame with the metrics
+model_comparison <- data.frame(
+  Metric = c("Accuracy", "AUC", "Sensitivity", "Specificity", "Balanced Accuracy"),
+  Stepwise_Model = c(0.8418, 0.9176, 0.8933, 0.7278, 0.8105),
+  Full_Model = c(0.8446, 0.9164, 0.8957, 0.7313, 0.8135)
+)
+
+# Reshape the data for plotting
+model_comparison_long <- model_comparison %>%
+  pivot_longer(cols = c("Stepwise_Model", "Full_Model"), 
+               names_to = "Model", 
+               values_to = "Value")
+
+# Plot the comparison
+ggplot(model_comparison_long, aes(x = Metric, y = Value, fill = Model)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.7) +
+  scale_fill_manual(values = c("Stepwise_Model" = "lightblue", "Full_Model" = "lightgreen")) +
+  labs(title = "Model Comparison: Stepwise vs Full Model", y = "Metric Value") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    text = element_text(size = 12)
+  ) +
+  geom_text(aes(label = sprintf("%.4f", Value)), 
+            position = position_dodge(width = 0.7), 
+            vjust = -0.5, 
+            size = 4) +
+  coord_cartesian(ylim = c(0.7, 1))  # Set y limits to better show differences
+
+```
+### The bar chart visually compares the performance of two models, a full model and a stepwise model, across various metrics: Accuracy, AUC (Area Under the Curve), Balanced Accuracy, Sensitivity, and Specificity.
+
+### Interpretation of Results:
+
+1. **Accuracy**:
+   - Both models show similar accuracy, with the Full Model at 0.8446 and the Stepwise Model at 0.8418. This indicates that both models correctly predict outcomes at similar rates.
+
+2. **AUC**:
+   - The AUC, which measures the model's ability to discriminate between classes, is slightly higher for the Stepwise Model (0.9176) compared to the Full Model (0.9164). This suggests that the Stepwise Model may be marginally better at distinguishing between positive and negative outcomes.
+
+3. **Balanced Accuracy**:
+   - Balanced Accuracy accounts for the true positive rate and the true negative rate. Here, the Full Model (0.8135) outperforms the Stepwise Model (0.8105) slightly, indicating a marginally better balance between sensitivity and specificity.
+
+4. **Sensitivity**:
+   - Sensitivity, or the true positive rate, is higher in the Full Model (0.8957) compared to the Stepwise Model (0.8933), suggesting that the Full Model is slightly more effective at identifying actual positives.
+
+5. **Specificity**:
+   - Specificity measures the true negative rate. The Full Model shows a significantly higher specificity (0.7313) than the Stepwise Model (0.7278), indicating better performance in identifying actual negatives.
+
+### Summary:
+- Both models perform comparably across most metrics, with slight variations in their performance. The Full Model tends to have marginally better balanced accuracy and specificity, while the Stepwise Model has a slightly higher AUC, suggesting better discriminatory power.
+- The choice between using the Full Model or the Stepwise Model may depend on the specific application and the importance of each metric in context. For example, if minimizing false positives is critical, the Full Model's higher specificity might be preferable.
+
+This comparison highlights the nuanced differences between the two modeling approaches, providing insights into their respective strengths and weaknesses in predicting outcomes.
+
+## Step - 4 building an application which uses the estimates of coeffcient to predict will get an insurance and how much their premium could be .
+   NOTE : premiums are purely an general assumption as each firm operates with diffrent strategies when it comes to giving their premiums
+
+
+
+
+
+#```{python}
+import math
+
+def get_int_input(prompt):
+    """Get an integer input with validation."""
+    while True:
+        try:
+            value = int(input(prompt))
+            return value
+        except ValueError:
+            print("Please enter a valid integer.")
+
+def get_float_input(prompt):
+    """Get a float input with validation."""
+    while True:
+        try:
+            value = float(input(prompt))
+            return value
+        except ValueError:
+            print("Please enter a valid number.")
+
+def logistic_predict():
+    # Coefficients from the logistic regression model
+    coefficients = {
+        'Intercept': -2.000e+00,
+        'AGE26-39': -8.426e-02,
+        'AGE40-64': 2.741e-02,
+        'AGE65+': -7.274e-02,
+        'GENDERmale': 1.074e+00,
+        'RACEminority': -1.210e-01,
+        'DRIVING_EXPERIENCE10-19y': -2.053e+00,
+        'DRIVING_EXPERIENCE20-29y': -4.226e+00,
+        'DRIVING_EXPERIENCE30y+': -5.360e+00,
+        'EDUCATIONnone': -1.140e-02,
+        'EDUCATIONuniversity': -4.200e-02,
+        'INCOMEpoverty': 2.304e-01,
+        'INCOMEupper class': 5.975e-02,
+        'INCOMEworking class': 1.722e-01,
+        'CREDIT_SCORE': 3.388e-01,
+        'VEHICLE_OWNERSHIP1': -1.936e+00,
+        'VEHICLE_YEARbefore 2015': 1.897e+00,
+        'MARRIED1': -3.168e-01,
+        'CHILDREN1': -8.967e-02,
+        'POSTAL_CODE21217': 2.112e+01,
+        'POSTAL_CODE32765': 1.276e+00,
+        'POSTAL_CODE92101': 1.715e+00,
+        'ANNUAL_MILEAGE': 1.161e-04,
+        'VEHICLE_TYPEsports car': -4.321e-02,
+        'SPEEDING_VIOLATIONS': 1.757e-02,
+        'DUIS': 1.502e-01,
+        'PAST_ACCIDENTS': -7.164e-02
+    }
+
+    # Gather user input for each variable
+    age = get_int_input("Enter age category (1: 26-39, 2: 40-64, 3: 65+): ")
+    gender = get_int_input("Enter gender (1: male, 0: female): ")
+    race = get_int_input("Enter race (1: minority, 0: majority): ")
+    driving_experience = get_int_input("Enter driving experience category (1: 10-19y, 2: 20-29y, 3: 30y+): ")
+    education = get_int_input("Enter education level (1: none, 2: university, 0: high school): ")
+    income = get_int_input("Enter income level (1: poverty, 2: upper class, 3: working class, 0: middle class): ")
+    credit_score = get_float_input("Enter credit score: ")
+    vehicle_ownership = get_int_input("Enter vehicle ownership (1: yes, 0: no): ")
+    vehicle_year = get_int_input("Enter vehicle year (1: before 2015, 0: 2015 or later): ")
+    married = get_int_input("Enter marital status (1: married, 0: single): ")
+    children = get_int_input("Enter children status (1: has children, 0: no children): ")
+    postal_code = get_int_input("Enter postal code (1: 21217, 2: 32765, 3: 92101, 0: other): ")
+    annual_mileage = get_float_input("Enter annual mileage: ")
+    vehicle_type = get_int_input("Enter vehicle type (1: sports car, 0: other): ")
+    speeding_violations = get_int_input("Enter number of speeding violations: ")
+    duis = get_int_input("Enter number of DUIs: ")
+    past_accidents = get_int_input("Enter number of past accidents: ")
+
+    # Calculate linear combination
+    linear_combination = (
+        coefficients['Intercept'] +
+        (coefficients['AGE26-39'] if age == 1 else 0) +
+        (coefficients['AGE40-64'] if age == 2 else 0) +
+        (coefficients['AGE65+'] if age == 3 else 0) +
+        (coefficients['GENDERmale'] * gender) +
+        (coefficients['RACEminority'] * race) +
+        (coefficients['DRIVING_EXPERIENCE10-19y'] if driving_experience == 1 else 0) +
+        (coefficients['DRIVING_EXPERIENCE20-29y'] if driving_experience == 2 else 0) +
+        (coefficients['DRIVING_EXPERIENCE30y+'] if driving_experience == 3 else 0) +
+        (coefficients['EDUCATIONnone'] if education == 1 else 0) +
+        (coefficients['EDUCATIONuniversity'] if education == 2 else 0) +
+        (coefficients['INCOMEpoverty'] if income == 1 else 0) +
+        (coefficients['INCOMEupper class'] if income == 2 else 0) +
+        (coefficients['INCOMEworking class'] if income == 3 else 0) +
+        (coefficients['CREDIT_SCORE'] * credit_score) +
+        (coefficients['VEHICLE_OWNERSHIP1'] * vehicle_ownership) +
+        (coefficients['VEHICLE_YEARbefore 2015'] * vehicle_year) +
+        (coefficients['MARRIED1'] * married) +
+        (coefficients['CHILDREN1'] * children) +
+        (coefficients['POSTAL_CODE21217'] if postal_code == 1 else 0) +
+        (coefficients['POSTAL_CODE32765'] if postal_code == 2 else 0) +
+        (coefficients['POSTAL_CODE92101'] if postal_code == 3 else 0) +
+        (coefficients['ANNUAL_MILEAGE'] * annual_mileage) +
+        (coefficients['VEHICLE_TYPEsports car'] * vehicle_type) +
+        (coefficients['SPEEDING_VIOLATIONS'] * speeding_violations) +
+        (coefficients['DUIS'] * duis) +
+        (coefficients['PAST_ACCIDENTS'] * past_accidents)
+    )
+
+    # Calculate probability using the logistic function
+    probability = 1 / (1 + math.exp(-linear_combination))
+
+    # Determine the outcome
+    outcome = 1 if probability >= 0.5 else 0
+
+    # Print the result
+    print(f"Predicted Probability: {probability:.4f}")
+    print(f"Predicted Outcome: {outcome}")
+
+    # If the outcome is 1, calculate and display the premium
+    if outcome == 1:
+        # Base premium (hypothetical average)
+        base_premium = 1000
+
+        # Adjust premium based on user inputs
+        age_adjustment = {1: 1.1, 2: 1.2, 3: 1.3}  # Example multipliers for age categories
+        driving_experience_adjustment = {1: 1.5, 2: 1.3, 3: 1.1}
+        vehicle_type_adjustment = {1: 1.4, 0: 1.0}
+
+        # Calculate premium
+        premium = base_premium
+        premium *= age_adjustment.get(age, 1.0)
+        premium *= driving_experience_adjustment.get(driving_experience, 1.0)
+        premium *= vehicle_type_adjustment.get(vehicle_type, 1.0)
+
+        # Adjust for credit score (hypothetical linear relationship)
+        credit_score_adjustment = max(0.5, min(1.5, 1.0 - (credit_score - 0.5)))
+        premium *= credit_score_adjustment
+
+        print(f"Calculated Premium: ${premium:.2f}")
+
+# Call the function
+logistic_predict()
+
+```
+
